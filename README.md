@@ -354,8 +354,12 @@ Cukup **dobel-klik file tersebut di Windows Explorer** (di root project maupun d
 Skrip batch akan secara otomatis:
 - Mendeteksi dan mengaktifkan virtual environment `venv`.
 - Menjalankan ekstraksi klip dan reframing vertikal 9:16 (`main.py`).
+- Membuat subfolder khusus per eksekusi di dalam `output\` (contoh: `output\run_20260915_025404_YA3CH8_YRus\`).
 - Membakar subtitle karaoke kata-per-kata via GPU NVENC (`burn_captions.py`).
-- Membuka folder `output\` di Windows Explorer saat proses selesai.
+- Membuka subfolder eksekusi terbaru tersebut langsung di Windows Explorer saat selesai.
+
+> **Struktur Folder Output Per Eksekusi**: Setiap kali perintah dijalankan (baik via CLI atau file `.bat`), pipeline akan otomatis membuat subfolder baru berformat `output\run_YYYYMMDD_HHMMSS_VIDEOID\` sehingga hasil klip dari video/eksekusi sebelumnya **tidak akan terhapus atau tertimpa**.
+> Cache video sumber (`source_*.mp4`) dan transkrip (`source_*.srt`) tetap tersimpan di `output\` agar proses tidak perlu mengunduh ulang video yang sama.
 
 Bisa juga dipanggil langsung dari terminal / PowerShell:
 

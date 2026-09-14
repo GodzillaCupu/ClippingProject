@@ -104,16 +104,24 @@ if !ERRORLEVEL! neq 0 (
     call .\venv\Scripts\python.exe burn_captions.py result.json --style !SUB_STYLE! --device cuda --model small
 )
 
+REM Cari folder eksekusi terbaru yang dibuat di dalam output\
+set "TARGET_DIR=output"
+for /f "tokens=*" %%a in ('dir /b /ad /o-d "output\run_*" 2^>nul') do (
+    set "TARGET_DIR=output\%%a"
+    goto :found_dir
+)
+:found_dir
+
 echo.
 echo ========================================================================
 echo [SELESAI] Seluruh video shorts dan subtitle berhasil diproses!
 echo Video siap unggah tersimpan di folder:
-echo   %CD%\output\*_cap.mp4
+echo   %CD%\!TARGET_DIR!
 echo ========================================================================
 echo.
 
-if exist "output" (
-    explorer output
+if exist "!TARGET_DIR!" (
+    explorer "!TARGET_DIR!"
 )
 
 pause

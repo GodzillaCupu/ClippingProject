@@ -62,6 +62,8 @@ def main() -> int:
 
     print("\n" + "=" * 72)
     print(f"Mode:          {result.get('mode', args.mode)}")
+    if result.get("out_dir"):
+        print(f"Output folder: {result['out_dir']}")
     print(f"Source video:  {result['source_video_url']}")
     print(f"Highlights:    {len(result['highlights'])} candidates → kept top {len(result['shorts'])}")
     print("=" * 72)
@@ -74,9 +76,15 @@ def main() -> int:
         else:
             print(f"     clip:   FAILED ({s.get('error')})")
 
+    # Always save result.json in the run output folder
+    if result.get("out_dir"):
+        run_json_path = os.path.join(result["out_dir"], "result.json")
+        with open(run_json_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+
     if args.output_json:
-        with open(args.output_json, "w") as f:
-            json.dump(result, f, indent=2)
+        with open(args.output_json, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
         print(f"\nFull JSON written to {args.output_json}")
 
     return 0

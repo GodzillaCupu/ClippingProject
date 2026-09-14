@@ -21,12 +21,23 @@ def _run_local(
     download_format: str,
     language: Optional[str],
 ) -> Dict:
+    import os
+    from datetime import datetime
+    from .config import LOCAL_OUTPUT_DIR
     from .local.clipper import crop_highlights_local
-    from .local.downloader import download_youtube_local
+    from .local.downloader import download_youtube_local, _extract_youtube_video_id
     from .local.llm import call_local_llm
     from .local.transcriber import transcribe_local
 
     source_path = download_youtube_local(youtube_url, fmt=download_format)
+
+    # Buat subfolder khusus untuk eksekusi ini (format: run_YYYYMMDD_HHMMSS_VIDEOID)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    video_id = _extract_youtube_video_id(youtube_url) or "video"
+    run_dir_name = f"run_{timestamp}_{video_id}"
+    run_out_dir = os.path.join(LOCAL_OUTPUT_DIR, run_dir_name)
+    os.makedirs(run_out_dir, exist_ok=True)
+    print(f"[pipeline/local] output folder for this run: {run_out_dir}", flush=True)
 
     transcript = transcribe_local(source_path, language=language)
     if not transcript["segments"]:
@@ -40,12 +51,13 @@ def _run_local(
         raise RuntimeError("Highlight generator returned zero clips.")
 
     top = sorted(all_highlights, key=lambda h: int(h.get("score", 0)), reverse=True)[:num_clips]
-    print(f"[pipeline/local] cropping {len(top)} of {len(all_highlights)} candidates", flush=True)
+    print(f"[pipeline/local] cropping {len(top)} of {len(all_highlights)} candidates into {run_out_dir}", flush=True)
 
-    shorts = crop_highlights_local(source_path, top, aspect_ratio=aspect_ratio)
+    shorts = crop_highlights_local(source_path, top, aspect_ratio=aspect_ratio, out_dir=run_out_dir)
 
     return {
         "mode": "local",
+        "out_dir": run_out_dir,
         "source_video_url": source_path,
         "transcript": transcript,
         "highlights": all_highlights,
