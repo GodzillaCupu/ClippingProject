@@ -291,9 +291,12 @@ cd AI-Youtube-Shorts-Generator; py -3.11 -m venv venv; .\venv\Scripts\Activate.p
 
 ### 5B.4 Install dependency
 
-```
+```bash
 pip install -r requirements-local.txt
+pip install "opencv-python<5"
 ```
+
+> **PENTING**: Wajib install `opencv-python<5` (misal 4.14.x). Versi OpenCV 5.0 terbaru telah menghapus modul `CascadeClassifier`, yang akan menyebabkan error `AttributeError: module 'cv2' has no attribute 'CascadeClassifier'` saat tahap reframing vertikal.
 
 ### 5B.5 Install runtime CUDA (langkah kunci — jangan dilewat)
 
@@ -301,28 +304,32 @@ pip install -r requirements-local.txt
 
 **Cara paling bersih** (hanya ~200 MB, tidak menarik PyTorch):
 
-```
+```bash
 pip install nvidia-cublas-cu12 nvidia-cudnn-cu12==9.*
 ```
 
+> **Catatan Windows DLL**: Pada Python Windows, DLL di site-packages perlu didaftarkan via `os.add_dll_directory` sebelum library CTranslate2 di-import (skrip `main.py` dan `burn_captions.py` di repo ini sudah dilengkapi auto-registrasi folder DLL NVIDIA).
+
 **Alternatif** kalau kamu memang butuh PyTorch untuk hal lain (~2.5 GB):
 
-```
+```bash
 pip install torch --index-url https://download.pytorch.org/whl/cu121
 ```
 
 ### 5B.6 File `.env`
 
-Buat file `.env` di root project:
+Buat file `.env` di root project (`AI-Youtube-Shorts-Generator/.env`):
 
-```
+```ini
 LLM_PROVIDER=gemini
 GEMINI_API_KEY=isi_key_kamu_disini
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.6-flash
 LOCAL_WHISPER_MODEL=small
 LOCAL_WHISPER_DEVICE=cuda
 LOCAL_OUTPUT_DIR=output
 ```
+
+> **Catatan Model Gemini**: Gunakan `gemini-3.6-flash`. Model `gemini-2.5-flash` sudah dihentikan Google untuk user baru dan akan mengembalikan error `404 NOT_FOUND`.
 
 **Kenapa `LOCAL_WHISPER_DEVICE=cuda` diset eksplisit, bukan `auto`:**
 
@@ -336,42 +343,135 @@ Verifikasi saat run — baris ini harus muncul di output:
 
 Kalau tertulis `device=cpu`, berarti `.env` belum kebaca atau nilainya masih `auto`.
 
-### 5B.7 Test run
+### 5B.7 Jalankan Otomatis via File Batch (One-Click Runner)
 
+Tersedia file batch otomatis: [`generate_shorts.bat`](generate_shorts.bat).
+Cukup **dobel-klik file tersebut di Windows Explorer** (di root project maupun di subfolder generator):
+1. Masukkan URL YouTube saat diminta (atau path video lokal).
+2. Tentukan jumlah klip yang diinginkan (tekan Enter untuk default: 3).
+3. Pilih gaya tampilan subtitle karaoke (`1`: Hormozi, `2`: Clean, `3`: Neon).
+
+Skrip batch akan secara otomatis:
+- Mendeteksi dan mengaktifkan virtual environment `venv`.
+- Menjalankan ekstraksi klip dan reframing vertikal 9:16 (`main.py`).
+- Membakar subtitle karaoke kata-per-kata via GPU NVENC (`burn_captions.py`).
+- Membuka folder `output\` di Windows Explorer saat proses selesai.
+
+Bisa juga dipanggil langsung dari terminal / PowerShell:
+
+```powershell
+.\generate_shorts.bat "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
-python main.py "https://www.youtube.com/watch?v=VIDEO_ID" --mode local --num-clips 3
+
+### 5B.8 Menjalankan Manual (Step-by-Step CLI)
+
+Jika ingin menjalankan setiap tahapan secara manual:
+
+**Langkah 1 — Ekstraksi Klip:**
+
+```powershell
+python main.py "https://www.youtube.com/watch?v=VIDEO_ID" --mode local --num-clips 3 --output-json result.json
 ```
 
 Hasil mendarat di `output\short_01.mp4`, `short_02.mp4`, dst.
 
-### 5B.8 Batch di Windows
+**Langkah 2 — Bakar Subtitle Karaoke (Word-Level):**
+
+```powershell
+python burn_captions.py result.json --style hormozi --device cuda --model small --nvenc
+```
+
+Hasil akhir bersubtitle: `output\short_01_cap.mp4`, `output\short_02_cap.mp4`, dst (1080×1920).
+
+### 5B.9 Batch di Windows
 
 Windows tidak punya `xargs`. Pakai PowerShell:
 
-```
+```powershell
 Get-Content urls.txt | ForEach-Object { python main.py $_ --mode local }
 ```
-
-### 5B.9 Percepat tahap render dengan NVENC (opsional)
-
-Tahap potong & crop pakai `ffmpeg` dengan encoder default `libx264` — itu murni CPU dan tidak menyentuh GPU sama sekali. RTX 3050 Ti punya encoder hardware NVENC yang menganggur.
-
-Edit `shorts_generator/local/clipper.py`, cari dua blok `subprocess.run` yang memanggil ffmpeg, lalu tambahkan `"-c:v", "h264_nvenc", "-preset", "p4"` ke daftar argumennya. Tahap render bisa 3–5× lebih cepat.
-
-Ini opsional — untuk video pendek bedanya tidak terasa. Baru signifikan saat batch banyak klip.
 
 ### 5B.10 Troubleshooting Windows
 
 | Gejala | Penyebab | Solusi |
 |---|---|---|
-| `Library cublas64_12.dll is not found` | cuBLAS belum terinstal | Jalankan langkah 5B.5 |
+| `Library cublas64_12.dll is not found` | cuBLAS belum terinstal / path DLL belum terdaftar | `pip install nvidia-cublas-cu12 nvidia-cudnn-cu12==9.*` + pastikan auto `os.add_dll_directory` aktif di `main.py` |
+| `module 'cv2' has no attribute 'CascadeClassifier'` | OpenCV 5.0 terinstal otomatis | Turunkan ke OpenCV 4: `pip install "opencv-python<5"` |
+| `404 NOT_FOUND ... gemini-2.5-flash is no longer available` | Model Gemini 2.5 sudah deprecated | Ganti `GEMINI_MODEL=gemini-3.6-flash` di `.env` |
+| `[WinError 32] The process cannot access the file ... .cut.mp4` | File lock OpenCV di Windows | Pastikan `del cap`, `del writer` dijalankan dan penghapusan file sementara dibungkus `try/except` |
+| `UnicodeEncodeError: 'charmap' codec can't encode character '\u2192'` | Terminal Windows default cp1252 | Gunakan `sys.stdout.reconfigure(encoding="utf-8")` pada script |
 | `Unable to load libcudnn_ops.so` / `cudnn64_9.dll` | cuDNN salah versi | `pip install nvidia-cudnn-cu12==9.*` (harus versi 9, bukan 8) |
 | `CUDA out of memory` | Model terlalu besar untuk 4 GB | Turunkan ke `small`, atau ubah `compute_type` ke `int8_float16` (lihat 5B.1) |
-| Log tetap bilang `device=cpu` | `.env` tidak kebaca / masih `auto` tanpa torch | Set `LOCAL_WHISPER_DEVICE=cuda` eksplisit |
+| Log tetap bilang `device=cpu` | `.env` tidak kebaca / masih `auto` tanpa torch | Set `LOCAL_WHISPER_DEVICE=cuda` eksplisit di `.env` |
 | `ffmpeg is not recognized` | Belum di PATH | Restart terminal setelah `winget install Gyan.FFmpeg` |
 | `Activate.ps1 cannot be loaded` | ExecutionPolicy | `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` |
 | Download YouTube gagal | yt-dlp usang | `pip install -U yt-dlp` |
 | Path error di file lokal | Backslash Windows | Pakai forward slash: `"C:/Users/nama/Videos/input.mp4"` |
+
+---
+
+## 5C. Konfigurasi Git & Tracking Folder Assets (`.gitignore`)
+
+Agar proyek tetap bersih dan tidak mengunggah file video besar (ratusan MB) atau API key ke GitHub, namun **tetap dapat melacak (*tracking*) aset visual di folder `AI-Youtube-Shorts-Generator/assets/`**, gunakan konfigurasi `.gitignore` berikut di root repository:
+
+```gitignore
+# Byte-compiled / cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+AI-Youtube-Shorts-Generator/**/__pycache__/
+
+# Environments & secrets (JANGAN di-commit!)
+.env
+*.env
+.venv/
+venv/
+AI-Youtube-Shorts-Generator/.env
+AI-Youtube-Shorts-Generator/venv/
+AI-Youtube-Shorts-Generator/.venv/
+
+# Output media & cache transkrip (file video besar)
+output/
+AI-Youtube-Shorts-Generator/output/
+*.mp4
+*.cut.mp4
+*.silent.mp4
+*.mkv
+*.webm
+*.srt
+*.words.json
+result.json
+AI-Youtube-Shorts-Generator/result.json
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# PENGECUALIAN: Pastikan folder assets TETAP di-track oleh Git
+!AI-Youtube-Shorts-Generator/assets/
+!AI-Youtube-Shorts-Generator/assets/**
+!assets/
+!assets/**
+```
+
+### Catatan Penting: Mengatasi Nested Git Repository
+
+Jika folder `AI-Youtube-Shorts-Generator` diperoleh melalui `git clone`, folder tersebut akan memiliki subdirektori `.git` sendiri di dalamnya. Akibatnya, Git pada project utama (`ClippingProject`) akan menganggapnya sebagai *submodule/embedded repo* dan menolak melakukan staging terhadap file di `AI-Youtube-Shorts-Generator/assets/`.
+
+**Solusi agar file di dalamnya (seperti `assets/` dan kode yang sudah dimodifikasi) dapat di-track penuh di project utama:**
+1. Hapus folder `.git` internal di dalam folder generator:
+   ```powershell
+   Remove-Item -Recurse -Force "AI-Youtube-Shorts-Generator\.git"
+   ```
+2. Jalankan `git status`, maka folder `AI-Youtube-Shorts-Generator/assets/` dan skrip pendukung akan langsung terbaca oleh Git project utama tanpa mengikutsertakan folder `output/` atau `venv/`.
+3. Lakukan tracking aset:
+   ```powershell
+   git add AI-Youtube-Shorts-Generator/assets
+   git add .gitignore README.md burn_captions.py
+   git commit -m "chore: setup gitignore, track assets, and update guide"
+   ```
 
 ### 5B.11 Windows RTX 3050 Ti vs MacBook M-series
 
